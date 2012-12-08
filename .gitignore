@@ -1,4 +1,5 @@
-*.gem
-pkg/*
-tmp/*
-ruby_debug.jar
+config.private.yaml
+*.out
+temp
+.rdebug_hist
+/nbproject/private/

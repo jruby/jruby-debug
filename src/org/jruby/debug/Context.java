@@ -404,7 +404,7 @@ public class Context extends RubyObject {
         RubyHash locals = RubyHash.newHash(getRuntime());
         DynamicScope scope = debugFrame.getInfo().getDynaVars();
         if (scope != null) {
-            DynamicScope evalScope = scope.getEvalScope();
+            DynamicScope evalScope = scope.getEvalScope(getRuntime());
             if (evalScope != null) {
                 scope = evalScope;
             }

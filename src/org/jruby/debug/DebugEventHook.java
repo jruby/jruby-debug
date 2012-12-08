@@ -263,7 +263,7 @@ final class DebugEventHook extends EventHook {
                 IRubyObject exception = _runtime.getGlobalVariables().get("$!");
                 // Might happen if the current ThreadContext is within 'defined?'
                 if (exception.isNil()) {
-                    assert tCtx.isWithinDefined() : "$! should be nil only when within defined?";
+                    //                    assert tCtx.isWithinDefined() : "$! should be nil only when within defined?";
                     break;
                 }
                 

@@ -1,8 +1,8 @@
 require 'rake/clean'
 require 'rake/testtask'
 require 'rdoc/task'
-require 'rubygems/package_task'
-require 'rake/javaextensiontask'
+require 'rubygems/package_task' 
+require 'rake/javaextensiontask'# rake-compiler
 
 GEM_VERSION = '0.10.4'
 
@@ -21,6 +21,7 @@ CLI_TEST_FILE_LIST = 'test/test-*.rb'
 desc "Test ruby-debug-base."
 task :test_base => :lib do
   Rake::TestTask.new(:test_base) do |t|
+    t.ruby_opts << "--debug"
     t.libs << './ext'
     t.libs << './lib'
     t.test_files = FileList[BASE_TEST_FILE_LIST]
@@ -31,6 +32,7 @@ end
 desc "Test everything."
 task :test => :test_base do 
   Rake::TestTask.new(:test) do |t|
+    t.ruby_opts << "--debug"
     t.libs << './ext'
     t.libs << './lib'
     t.libs << './cli'
@@ -39,21 +41,24 @@ task :test => :test_base do
   end
 end
 
+RUBY_DEBUG_PROJECT = 'https://github.com/ruby-debug/ruby-debug/blob/master'
+
 desc "Helps to setup the project to be able to run tests"
 task :prepare_tests do
   # needed to run CLI test. Unable to use svn:externals yet:
   #   http://subversion.tigris.org/issues/show_bug.cgi?id=937
   
   # rdbg.rb
-  sh "svn cat svn://rubyforge.org/var/svn/ruby-debug/tags/ruby-debug-#{GEM_VERSION}/rdbg.rb > rdbg.rb" unless File.exists?('rdbg.rb')
+  sh "curl #{RUBY_DEBUG_PROJECT}/rdbg.rb > rdbg.rb" unless File.exists?('rdbg.rb')
 
   # runner.sh
   runner = 'runner.sh'
-  sh "svn cat svn://rubyforge.org/var/svn/ruby-debug/tags/ruby-debug-#{GEM_VERSION}/runner.sh > #{runner}" unless File.exists?(runner)
+  sh "curl #{RUBY_DEBUG_PROJECT}/#{runner} > #{runner}" unless File.exists?('runner.sh')
   text = File.read('runner.sh')
   File.open(runner, 'w') {|f| f.write(text.gsub(/-ruby/ , '-jruby --debug'))}
   File.chmod(0755, runner)
 
+  mkdir 'test' unless File.exist? 'test'
   File.open('test/config.private.yaml', 'w') do |f|
     f.write <<EOF
 # either should be on the $PATH or use full path
