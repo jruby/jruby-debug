@@ -115,7 +115,7 @@ final class DebugEventHook extends EventHook {
         IRubyObject context = contexts.context;
         DebugContext debugContext = contexts.debugContext;
 
-//        debug("jrubydebug> %s:%d [%s] %s\n", file, line, EVENT_NAMES[event], methodName);
+        //System.err.println("jrubydebug> " + file + ":" + line + " [" + event + "] " + methodName + "\n");
 
         boolean moved = false;
         if (!debugContext.isForceMove() ||

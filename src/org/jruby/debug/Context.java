@@ -38,6 +38,7 @@ import org.jruby.parser.StaticScope;
 import org.jruby.runtime.Arity;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.DynamicScope;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 
 public class Context extends RubyObject {
@@ -338,10 +339,10 @@ public class Context extends RubyObject {
      * </p>
      */
     @JRubyMethod(name="set_breakpoint", required=2, optional=1)
-    public IRubyObject set_breakpoint(IRubyObject[] args, Block block) {
+    public IRubyObject set_breakpoint(ThreadContext tc, IRubyObject[] args, Block block) {
         checkStarted();
         
-        IRubyObject breakpoint = debugger.createBreakpointFromArgs(this, args, 0);
+        IRubyObject breakpoint = debugger.createBreakpointFromArgs(tc, args, 0);
         debugContext().setBreakpoint(breakpoint);
         
         return breakpoint;

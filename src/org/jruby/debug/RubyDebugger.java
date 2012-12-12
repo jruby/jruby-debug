@@ -33,6 +33,7 @@ import org.jruby.anno.JRubyMethod;
 import org.jruby.debug.RubyDebugBaseLibrary.DebugThread;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.ObjectAllocator;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 
 public final class RubyDebugger {
@@ -91,8 +92,8 @@ public final class RubyDebugger {
      * </p>
      */
     @JRubyMethod(name="start_", module=true)
-    public static IRubyObject start(IRubyObject recv, Block block) {
-        return debugger().start(recv, block);
+    public static IRubyObject start(ThreadContext tc, IRubyObject recv, Block block) {
+        return debugger().start(tc, recv, block);
     }
 
     /**
@@ -104,9 +105,8 @@ public final class RubyDebugger {
      * </p>
      */
     @JRubyMethod(name="stop", module=true)
-    public static IRubyObject stop(IRubyObject recv, Block block) {
-        boolean stopped = debugger().stop(recv.getRuntime());
-        return Util.toRBoolean(recv, stopped);
+    public static IRubyObject stop(ThreadContext tc, IRubyObject recv, Block block) {
+        return Util.toRBoolean(recv, debugger().stop(tc));
     }
     
     @JRubyMethod(name="started?", module=true)
@@ -121,8 +121,8 @@ public final class RubyDebugger {
     }
 
     @JRubyMethod(name="add_breakpoint", module=true, required=2, optional=1)
-    public static IRubyObject add_breakpoint(IRubyObject recv, IRubyObject[] args, Block block) {
-        return debugger().addBreakpoint(recv, args);
+    public static IRubyObject add_breakpoint(ThreadContext tc, IRubyObject recv, IRubyObject[] args, Block block) {
+        return debugger().addBreakpoint(tc, args);
     }
 
     @JRubyMethod(name="remove_breakpoint", module=true, required=1)
@@ -148,18 +148,18 @@ public final class RubyDebugger {
     }
 
     @JRubyMethod(name="contexts", module=true)
-    public static IRubyObject contexts(IRubyObject recv, Block block) {
+    public static IRubyObject contexts(ThreadContext tc, IRubyObject recv, Block block) {
         return debugger().getDebugContexts(recv);
     }
 
-    @JRubyMethod(name="current_context", module=true)
-    public static IRubyObject current_context(IRubyObject recv, Block block) {
-        return debugger().getCurrentContext(recv);
+    @JRubyMethod(name= "current_context", module=true)
+    public static IRubyObject current_context(ThreadContext tc, IRubyObject recv, Block block) {
+        return debugger().getCurrentContext(tc);
     }
 
     @JRubyMethod(name="thread_context", module=true, required=1)
-    public static IRubyObject thread_context(IRubyObject recv, IRubyObject context, Block block) {
-        return debugger().getCurrentContext(recv);
+    public static IRubyObject thread_context(ThreadContext tc, IRubyObject recv, IRubyObject context, Block block) {
+        return debugger().getCurrentContext(tc);
     }
 
     @JRubyMethod(name="suspend", module=true)
@@ -203,19 +203,21 @@ public final class RubyDebugger {
      *        loading the debugger; so here +increment_start+ will be false.
      */
     @JRubyMethod(name="debug_load", module=true, required=1, optional=2)
-    public static IRubyObject debug_load(IRubyObject recv, IRubyObject[] args, Block block) {
-        debugger().load(recv, args);
+    public static IRubyObject debug_load(ThreadContext tc, IRubyObject recv, IRubyObject[] args, Block block) {
+        debugger().load(tc, recv, args);
+        
         return Util.nil(recv);
     }
 
     @JRubyMethod(name="skip", module=true)
-    public static IRubyObject skip(IRubyObject recv, Block block) {
-        return debugger().skip(recv, block);
+    public static IRubyObject skip(ThreadContext tc, IRubyObject recv, Block block) {
+        return debugger().skip(tc, block);
     }
 
     @JRubyMethod(name="debug_at_exit", module=true)
-    public static IRubyObject debug_at_exit(IRubyObject recv, Block block) {
-        RubyProc proc = RubyKernel.proc(recv.getRuntime().getCurrentContext(), recv, block);
+    public static IRubyObject debug_at_exit(ThreadContext tc, IRubyObject recv, Block block) {
+        RubyProc proc = RubyKernel.proc(tc, recv, block);
+        
         recv.getRuntime().pushExitBlock(proc);
         
         return proc;
@@ -273,12 +275,14 @@ public final class RubyDebugger {
     }
 
     private static final ObjectAllocator BREAKPOINT_ALLOCATOR = new ObjectAllocator() {
+        @Override
         public IRubyObject allocate(Ruby runtime, RubyClass klass) {
             return new Breakpoint(runtime, klass);
         }
     };
 
     private static final ObjectAllocator CONTEXT_ALLOCATOR = new ObjectAllocator() {
+        @Override
         public IRubyObject allocate(Ruby runtime, RubyClass klass) {
             return new Context(runtime, klass, debugger());
         }
