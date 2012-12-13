@@ -36,16 +36,16 @@ import org.jruby.RubyHash;
 import org.jruby.RubyString;
 import org.jruby.RubyThread;
 import org.jruby.debug.DebugBreakpoint.Type;
+import org.jruby.exceptions.RaiseException;
 import org.jruby.runtime.Arity;
 import org.jruby.runtime.Block;
-import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 
 final class Debugger {
 
     private DebugEventHook debugEventHook;
     
-    private Map<RubyThread, Context> threadsTable = new IdentityHashMap<RubyThread, Context>();
+    private Map<RubyThread, Context> threadsTable;
     
     private IRubyObject breakpoints;
     private IRubyObject catchpoints;
@@ -55,8 +55,9 @@ final class Debugger {
     private boolean debug;
     private boolean trackFrameArgs;
 
-    private IRubyObject lastContext;
     private IRubyObject lastThread;
+    private IRubyObject lastContext;
+    private DebugContext lastDebugContext;
 
     private boolean started;
     private int startCount;
@@ -64,115 +65,135 @@ final class Debugger {
     /** Used to for unique breakpoint ID for newly added breakpoints. */
     private int lastBreakpointID;
 
-    private DebugContext lastDebugContext;
 
-    IRubyObject start(ThreadContext tc, IRubyObject recv, Block block) {
+    IRubyObject start(IRubyObject recv, Block block) {
+        Ruby runtime = recv.getRuntime();
+        
         startCount++;
         IRubyObject result;
         if (started) {
-            result = tc.runtime.getFalse();
+            result = runtime.getFalse();
         } else {
-            IRubyObject nil = tc.runtime.getNil();
+            IRubyObject nil = runtime.getNil();
             lastThread  = nil;
+            lastContext = nil;
+            lastDebugContext = null;
             started = true;
-            setLastContext(nil);
-            debugEventHook = new DebugEventHook(this, tc.runtime);
-            breakpoints = tc.runtime.newArray();
-            catchpoints = RubyHash.newHash(tc.runtime);
-            tc.runtime.addEventHook(debugEventHook);
-            result = tc.runtime.getTrue();
+            debugEventHook = new DebugEventHook(this, runtime);
+            breakpoints = runtime.newArray();
+            catchpoints = RubyHash.newHash(runtime);
+            threadsTable = new IdentityHashMap<RubyThread, Context>();
+            runtime.addEventHook(debugEventHook);
+            result = runtime.getTrue();
         }
         
         if (block.isGiven()) {
             try {
-                return block.yield(tc, recv);
+                return block.yield(runtime.getCurrentContext(), recv);
             } finally {
-                stop(tc);
+                stop(runtime);
             }
         }
         
         return result;
     }
 
-    boolean stop(ThreadContext tc) {
-        checkStarted(tc.runtime);
-        
+    boolean stop(final Ruby runtime) {
+        checkStarted(runtime);
         startCount--;
-        if (startCount > 0) return false;
-
-        tc.runtime.tearDown();   
-        tc.runtime.removeEventHook(debugEventHook);
+        if (startCount > 0) {
+            return false;
+        }
+        runtime.removeEventHook(debugEventHook);
         breakpoints = null;
         catchpoints = null;
         debugEventHook = null;
         started = false;
-        threadsTable.clear();
+        threadsTable = null;
+        IRubyObject nil = runtime.getNil();
+        lastThread = nil;
+        lastContext = nil;
+        lastDebugContext = null;
         return true;
     }
 
     /** see {@link RubyDebugger#debug_load} */
-    void load(ThreadContext tc, IRubyObject recv, IRubyObject[] args) {
-        Arity.checkArgumentCount(tc.runtime, args, 1, 3);
-        IRubyObject[] actual = Arity.scanArgs(tc.runtime, args, 1, 2);
+    IRubyObject load(IRubyObject recv, IRubyObject[] args) {
+        Ruby rt = recv.getRuntime();
+        Arity.checkArgumentCount(rt, args, 1, 3);
+        IRubyObject[] actual = Arity.scanArgs(rt, args, 1, 2);
         IRubyObject file = args[0];
         IRubyObject stop = actual[1];
         IRubyObject incrementStart = actual[2];
 
-        start(tc, recv, Block.NULL_BLOCK);
+        start(recv, Block.NULL_BLOCK);
         if (!incrementStart.isTrue()) {
             startCount--;
         }
-        IRubyObject context = getCurrentContext(tc);
+        IRubyObject context = getCurrentContext(recv);
         DebugContext debugContext = (DebugContext) context.dataGetStruct();
         debugContext.clearFrames();
         if (stop.isTrue()) {
             debugContext.setStopNext(1);
         }
 
+        /* Initializing $0 to the script's path */
+        rt.getGlobalVariables().set("$0", file);
+
         try {
           RubyString fileText = file.convertToString();
-          tc.runtime.getLoadService().load(fileText.getByteList().toString(), false);
+          rt.getLoadService().load(fileText.getByteList().toString(), false);
+          return rt.getNil();
+        } catch (RaiseException e) {
+          suspend(recv);
+          return e.getException();
         } finally {
-          stop(tc);
+          debugContext.resetSteppingStopPoints();
         }
     }
     
-    IRubyObject getCurrentContext(ThreadContext tc) {
-        return contextForThread(tc.getThread());
+    IRubyObject getCurrentContext(IRubyObject recv) {
+        checkStarted(recv);
+        RubyThread thread = recv.getRuntime().getCurrentContext().getThread();
+        return contextForThread(thread);
     }
     
-    DebugContext getCurrentDebugContext(ThreadContext tc) {
-        return threadContextLookup(tc.getThread(), true).debugContext;
+    DebugContext getCurrentDebugContext(IRubyObject recv) {
+        checkStarted(recv);
+        RubyThread thread = recv.getRuntime().getCurrentContext().getThread();
+        return threadContextLookup(thread, true).debugContext;
     }
 
     DebugContextPair threadContextLookup(final RubyThread thread, final boolean wantDebugContext) {
         checkStarted(thread);
 
         DebugContextPair ctxs = new DebugContextPair();
-        if (lastThread == thread && !lastContext.isNil()) {
-            ctxs.context = (Context) lastContext;
-            if (wantDebugContext) {
-                ctxs.debugContext = lastDebugContext;
-            }
-            return ctxs;
-        }
 
         synchronized (threadsTable) {
+            if (lastThread == thread && !lastContext.isNil()) {
+                ctxs.context = (Context) lastContext;
+                if (wantDebugContext) {
+                    ctxs.debugContext = lastDebugContext;
+                }
+                return ctxs;
+            }
+
             ctxs.context = threadsTable.get(thread);
             if (ctxs.context == null) {
                 ctxs.context = debugContextCreate(thread);
                 threadsTable.put(thread, ctxs.context);
             }
+
+            DebugContext lDebugContext = (DebugContext) ctxs.context.dataGetStruct();
+            if (wantDebugContext) {
+                ctxs.debugContext = lDebugContext;
+            }
+
+            lastThread = thread;
+            lastContext = ctxs.context;
+            lastDebugContext = lDebugContext;
         }
 
-        DebugContext lDebugContext = (DebugContext) ctxs.context.dataGetStruct();
-        if (wantDebugContext) {
-            ctxs.debugContext = lDebugContext;
-        }
-
-        lastThread = thread;
-        setLastContext(ctxs.context);
-        lastDebugContext = lDebugContext;
         return ctxs;
     }
 
@@ -189,11 +210,6 @@ final class Debugger {
         if (!started) {
             throw runtime.newRuntimeError("Debugger.start is not called yet.");
         }
-    }
-    
-    ThreadContext ensureStarted(ThreadContext context) {
-        checkStarted(context.runtime);
-        return context;
     }
 
     private Context debugContextCreate(RubyThread thread) {
@@ -216,7 +232,9 @@ final class Debugger {
         
         synchronized (threadsTable) {
             for (int i = 0; i < list.size(); i++) {
-                newList.add(contextForThread((RubyThread) list.entry(i)));
+                RubyThread thread = (RubyThread) list.entry(i);
+                Context context = contextForThread(thread);
+                newList.add(context);
             }
             for (int i = 0; i < newList.size(); i++) {
                 Context context = (Context) newList.entry(i);
@@ -290,9 +308,9 @@ final class Debugger {
         return breakpoints;
     }
     
-    IRubyObject addBreakpoint(ThreadContext tc, IRubyObject[] args) {
-        checkStarted(tc.runtime);
-        IRubyObject result = createBreakpointFromArgs(tc, args, ++lastBreakpointID);
+    IRubyObject addBreakpoint(IRubyObject recv, IRubyObject[] args) {
+        checkStarted(recv);
+        IRubyObject result = createBreakpointFromArgs(recv, args, ++lastBreakpointID);
         ((RubyArray) breakpoints).add(result);
         return result;
     }
@@ -312,12 +330,12 @@ final class Debugger {
         return Util.nil(recv);
     }
     
-    IRubyObject createBreakpointFromArgs(ThreadContext tc, IRubyObject[] args) {
-        return createBreakpointFromArgs(tc, args, ++lastBreakpointID);
+    IRubyObject createBreakpointFromArgs(IRubyObject recv, IRubyObject[] args) {
+        return createBreakpointFromArgs(recv, args, ++lastBreakpointID);
     }
 
-    IRubyObject createBreakpointFromArgs(ThreadContext tc, IRubyObject[] args, int id) {
-        Ruby rt = tc.getRuntime();
+    IRubyObject createBreakpointFromArgs(IRubyObject recv, IRubyObject[] args, int id) {
+        Ruby rt = recv.getRuntime();
 
         IRubyObject expr;
         if (Arity.checkArgumentCount(rt, args, 2, 3) == 3) {
@@ -381,13 +399,15 @@ final class Debugger {
         }
     }    
     
-    IRubyObject skip(ThreadContext tc, Block block) {
-        if (! block.isGiven()) throw tc.runtime.newArgumentError("called without a block");
+    IRubyObject skip(IRubyObject recv, Block block) {
+        if (! block.isGiven()) {
+            throw recv.getRuntime().newArgumentError("called without a block");
+        }
         
-        DebugContext context = getCurrentDebugContext(tc);
+        DebugContext context = getCurrentDebugContext(recv);
         try {
             context.setSkipped(true);
-            return block.yield(tc, tc.runtime.getNil());
+            return block.yield(recv.getRuntime().getCurrentContext(), recv.getRuntime().getNil());
         } finally {
             context.setSkipped(false);
         }
@@ -413,10 +433,6 @@ final class Debugger {
     static final class DebugContextPair {
         Context context;
         DebugContext debugContext;
-    }
-
-    private void setLastContext(IRubyObject value) {
-        lastContext = value;
     }
 
     void setTrackFrameArgs(boolean trackFrameArgs) {

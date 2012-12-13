@@ -115,7 +115,7 @@ final class DebugEventHook extends EventHook {
         IRubyObject context = contexts.context;
         DebugContext debugContext = contexts.debugContext;
 
-        //System.err.println("jrubydebug> " + file + ":" + line + " [" + event + "] " + methodName + "\n");
+//        debug("jrubydebug> %s:%d [%s] %s\n", file, line, EVENT_NAMES[event], methodName);
 
         boolean moved = false;
         if (!debugContext.isForceMove() ||
@@ -263,7 +263,6 @@ final class DebugEventHook extends EventHook {
                 IRubyObject exception = _runtime.getGlobalVariables().get("$!");
                 // Might happen if the current ThreadContext is within 'defined?'
                 if (exception.isNil()) {
-                    //                    assert tCtx.isWithinDefined() : "$! should be nil only when within defined?";
                     break;
                 }
                 
@@ -393,7 +392,7 @@ final class DebugEventHook extends EventHook {
             topFrame.setFile(file);
             topFrame.setLine(line);
             topFrame.setMethodName(methodName);
-            topFrame.getInfo().setDynaVars(event == C_CALL ? null : tCtx.getCurrentScope());
+            topFrame.getInfo().setDynaVars(tCtx.getCurrentScope());
         }
     }
 
@@ -440,7 +439,13 @@ final class DebugEventHook extends EventHook {
             return false;
         }
         String source = debugBreakpoint.getSource().toString();
-        return new File(source).equals(new File(file));
+        if (source.startsWith("./")) {
+            source = source.substring(2);
+        }
+        if (file.startsWith("./")) {
+            file = file.substring(2);
+        }
+        return source.endsWith(file) || file.endsWith(source);
     }
 
     private IRubyObject checkBreakpointsByMethod(DebugContext debugContext,
@@ -479,7 +484,11 @@ final class DebugEventHook extends EventHook {
         if (! debugBreakpoint.getPos().getMethodName().equals(methodName)) {
             return false;
         }
-        if (debugBreakpoint.getSource().asString().eql(klass.asString())) {
+        RubyString source = debugBreakpoint.getSource().asString();
+        if (source.eql(klass.asString())) {
+            return true;
+        }
+        if (klass instanceof MetaClass && source.eql(((MetaClass)klass).getAttached().asString())) {
             return true;
         }
         return false;

@@ -25,6 +25,8 @@
  */
 package org.jruby.debug;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
@@ -38,7 +40,6 @@ import org.jruby.parser.StaticScope;
 import org.jruby.runtime.Arity;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.DynamicScope;
-import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 
 public class Context extends RubyObject {
@@ -339,10 +340,10 @@ public class Context extends RubyObject {
      * </p>
      */
     @JRubyMethod(name="set_breakpoint", required=2, optional=1)
-    public IRubyObject set_breakpoint(ThreadContext tc, IRubyObject[] args, Block block) {
+    public IRubyObject set_breakpoint(IRubyObject[] args, Block block) {
         checkStarted();
         
-        IRubyObject breakpoint = debugger.createBreakpointFromArgs(tc, args, 0);
+        IRubyObject breakpoint = debugger.createBreakpointFromArgs(this, args, 0);
         debugContext().setBreakpoint(breakpoint);
         
         return breakpoint;
@@ -405,7 +406,16 @@ public class Context extends RubyObject {
         RubyHash locals = RubyHash.newHash(getRuntime());
         DynamicScope scope = debugFrame.getInfo().getDynaVars();
         if (scope != null) {
-            DynamicScope evalScope = scope.getEvalScope(getRuntime());
+            DynamicScope evalScope = null;            
+            try {
+              final Class<? extends DynamicScope> clazz = scope.getClass();
+              final Method method = clazz.getDeclaredMethod("getEvalScope");
+              final Class[] args = method.getParameterTypes();            
+              evalScope = (DynamicScope)(args.length > 0 ? method.invoke(scope, getRuntime()) : method.invoke(scope));
+            } catch (NoSuchMethodException ignored) { 
+            } catch (IllegalAccessException ignored) {                
+            } catch (InvocationTargetException ignored) {                
+            }
             if (evalScope != null) {
                 scope = evalScope;
             }
