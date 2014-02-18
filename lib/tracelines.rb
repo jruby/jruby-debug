@@ -22,7 +22,7 @@ module TraceLineNumbers
   # We assume the each line has \n at the end. If not 
   # set the newline parameters to \n.
   def lnums_for_str_array(string_array, newline='')
-    lnums_for_str(string_array.join(newline))
+    lnums_for_str(string_array)
   end
   module_function :lnums_for_str_array
 end
