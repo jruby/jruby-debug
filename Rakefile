@@ -96,9 +96,7 @@ Java extension to make fast ruby debugger run on JRuby.
 It is the same what ruby-debug-base is for native Ruby.
 EOF
   s.author   = 'debug-commons team'
-  s.homepage = 'http://rubyforge.org/projects/debug-commons/'
-  s.has_rdoc = true
-  s.rubyforge_project = 'debug-commons'
+  s.homepage = 'https://github.com/jruby/jruby-debug'
 end
 
 Gem::PackageTask.new(spec) {}
@@ -110,10 +108,4 @@ end
 RDoc::Task.new do |t|
   t.main = 'README'
   t.rdoc_files.include 'README'
-end
-
-
-desc "Create a GNU-style ChangeLog via svn2cl"
-task :ChangeLog do
-  system("svn2cl --authors=svn2cl_usermap svn://rubyforge.org/var/svn/debug-commons/jruby-debug/trunk")
 end
