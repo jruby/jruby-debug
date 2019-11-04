@@ -102,25 +102,7 @@ final class Util {
     }
 
     static RubyEvent typeForEvent(final String event) {
-        if ("line".equals(event)) {
-            return LINE;
-        } else if ("class".equals(event)) {
-            return CLASS;
-        } else if ("end".equals(event)) {
-            return END;
-        } else if ("call".equals(event)) {
-            return CALL;
-        } else if ("return".equals(event)) {
-            return RETURN;
-        } else if ("c-call".equals(event)) {
-            return C_CALL;
-        } else if ("c-return".equals(event)) {
-            return C_RETURN;
-        } else if ("raise".equals(event)) {
-            return RAISE;
-        } else {
-            throw new IllegalArgumentException("unknown event type: " + event);
-        }
+        return RubyEvent.fromName(event);
     }
 }
 
