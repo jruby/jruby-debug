@@ -1,5 +1,7 @@
 = ruby-debug-base for JRuby
 
+[NOTE: This project has been superceded by  https://github.com/ruby-debug/ruby-debug.  It is left for historical context (and was only valid for Netbeans IDE).
+
 == Overview
 
 (j)ruby-debug-base provides the fast debugger extension for JRuby interpreter.
